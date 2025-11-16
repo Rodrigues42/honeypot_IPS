@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+
+  honeypot:
+    image: cowrie/cowrie:latest
+    container_name: cowrie_honeypot
+    # Publica a porta 2222 do host para a porta 2222 do contêiner
+    # Esta é a porta padrão que o Cowrie escuta [8, 24, 28]
+    ports:
+      - "22:2222" 
+    # Mapeia o volume de logs. O caminho interno é /cowrie/cowrie-git/var/log/cowrie/ [8, 27]
+    volumes:
+      - cowrie-logs:/cowrie/cowrie-git/var/log/cowrie
+    restart: unless-stopped
+    # Isola o honeypot em sua própria rede bridge
+    networks:
+      - honeynet 
+
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: fail2ban_monitor
+    # Usa a rede do HOST para ver o IP real e modificar as iptables do host [7, 12, 15, 16]
+    network_mode: "host"
+    # Concede privilégios de administrador de rede ao contêiner [12, 15]
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      # Volume de configuração persistente, onde os arquivos.conf serão colocados 
+      - ./fail2ban-data:/data
+      # Monta os logs do Cowrie em modo SOMENTE LEITURA [12, 14]
+      - cowrie-logs:/var/log/cowrie:ro
+    environment:
+      - TZ=America/Sao_Paulo
+      - F2B_LOG_LEVEL=INFO
+    restart: unless-stopped
+    # Garante que o fail2ban inicie após o honeypot 
+    depends_on:
+      - honeypot
+
+volumes:
+  # Define o volume nomeado que será compartilhado
+  cowrie-logs:
+    driver: local
+        
+networks:
+  # Define a rede isolada para o honeypot
+  honeynet:
+    driver: bridge
+    
