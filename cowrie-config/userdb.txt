@@ -1,0 +1,13 @@
+root:x:admin
+root:x:password
+root:x:123456
+root:x:user
+
+admin:x:admin
+admin:x:password
+admin:x:user
+admin:x:test
+
+*:x:password
+*:x:123456
+*:x:love

@@ -12,6 +12,8 @@ services:
     # Mapeia o volume de logs. O caminho interno é /cowrie/cowrie-git/var/log/cowrie/ [8, 27]
     volumes:
       - cowrie-logs:/cowrie/cowrie-git/var/log/cowrie
+      - ./cowrie-config:/cowrie/cowrie-git/etc
+
     restart: unless-stopped
     # Isola o honeypot em sua própria rede bridge
     networks:
