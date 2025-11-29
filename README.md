@@ -1,4 +1,4 @@
-# Guia Completo: Sistema Honeypot com Cowrie e Fail2ban
+# Sistema Honeypot com Cowrie e Fail2ban
 
 ## 📋 Índice
 1. [Visão Geral do Sistema](#-visão-geral-do-sistema)
